@@ -1,0 +1,607 @@
+# -------------------------
+# LAB NO : 2
+# -------------------------
+import boto3
+print("SageMaker Notebook is working!")
+
+# Test access to S3
+s3 = boto3.client('s3')
+buckets = s3.list_buckets()
+print("Available Buckets:", [b['Name'] for b in buckets['Buckets']])
+
+
+
+
+
+
+
+
+
+
+
+# -------------------------
+# LAB NO : 3
+# -------------------------
+# -------------------------
+# 1. Import necessary libraries
+# -------------------------
+import sagemaker
+import boto3
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
+
+# -------------------------
+# 2. Sagemaker session + bucket
+# -------------------------
+sagemaker_session = sagemaker.Session()
+role = sagemaker.get_execution_role()
+
+bucket = sagemaker_session.default_bucket()
+prefix = "lab-linear-regression"
+
+print("Using S3 bucket:", bucket)
+
+# Create sample linear regression dataset
+np.random.seed(42)
+
+X = 2.0 * np.random.rand(200, 1) * 25   # Feature values
+y = 4.0 + 3.0 * X + np.random.randn(200, 1) * 4  # Target values with noise
+
+df = pd.DataFrame({
+    "X": X.flatten(),
+    "target_y": y.flatten()
+})
+
+print("Dataset created. First 5 rows:")
+print(df.head())
+# 1. Create synthetic dataset
+np.random.seed(42)
+X = 2.0 * np.random.rand(200, 1) * 25
+y = 4.0 + 3.0 * X + np.random.randn(200, 1) * 4
+
+df = pd.DataFrame({
+    "X": X.flatten(),
+    "target_y": y.flatten()
+})
+
+# 2. Save CSV file locally (IMPORTANT)
+df.to_csv("training_data.csv", index=False)
+
+print("CSV saved locally:", "training_data.csv")
+
+# 3. Upload the CSV to S3
+input_path = sagemaker_session.upload_data(
+    path="training_data.csv",
+    bucket=bucket,
+    key_prefix=prefix
+)
+
+print("Uploaded to S3:", input_path)
+# Load data again (simulating training input)
+data = pd.read_csv("training_data.csv")
+
+X_train = data[['X']]
+y_train = data[['target_y']]
+
+
+
+# Train the model
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+print("\nModel Training Completed.")
+print("Model Intercept (b0):", model.intercept_[0])
+print("Model Coefficient (b1):", model.coef_[0][0])
+y_pred = model.predict(X_train)
+
+mse = mean_squared_error(y_train, y_pred)
+
+print("\nMean Squared Error (MSE):", mse)
+
+
+# Plotting
+plt.figure(figsize=(10,5))
+plt.scatter(X_train, y_train, color='blue', label='Actual Data')
+plt.plot(X_train, y_pred, color='red', label='Regression Line', linewidth=2)
+
+plt.title("Linear Regression Model Fit")
+plt.xlabel("Feature (X)")
+plt.ylabel("Target (y)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+
+
+
+
+
+
+
+# -------------------------
+# LAB NO : 4
+# -------------------------
+# ======================================================================
+# TITANIC DATA CLEANING & FEATURE ENGINEERING PIPELINE
+# ======================================================================
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
+
+# ---------------------------------------------------
+# 1. Load the Titanic dataset
+# ---------------------------------------------------
+df_titanic = sns.load_dataset('titanic')
+
+print("\n=== First 5 Rows ===")
+display(df_titanic.head())
+
+# ---------------------------------------------------
+# 2. Dataset info
+# ---------------------------------------------------
+print("\n=== Dataset Info ===")
+print(df_titanic.info())
+
+# ---------------------------------------------------
+# 3. Statistical summary
+# ---------------------------------------------------
+print("\n=== Statistical Summary ===")
+display(df_titanic.describe())
+
+# ---------------------------------------------------
+# 4. Check dataset shape
+# ---------------------------------------------------
+print(f"\nDataset has {df_titanic.shape[0]} rows and {df_titanic.shape[1]} columns.")
+
+# ---------------------------------------------------
+# 5. Null values count
+# ---------------------------------------------------
+print("\n=== Null Values in Each Column ===")
+print(df_titanic.isnull().sum())
+
+# ---------------------------------------------------
+# 6. Fill missing 'age' with median
+# ---------------------------------------------------
+median_age = df_titanic['age'].median()
+print("\nMedian Age:", median_age)
+
+df_titanic['age'] = df_titanic['age'].fillna(median_age)
+
+# ---------------------------------------------------
+# 7. Drop 'deck' column (too many missing values)
+# ---------------------------------------------------
+df_titanic.drop('deck', axis=1, inplace=True)
+
+# ---------------------------------------------------
+# 8. Fill missing 'embarked' and 'embark_town'
+# ---------------------------------------------------
+mode_embarked = df_titanic['embarked'].mode()[0]
+mode_embark_town = df_titanic['embark_town'].mode()[0]
+
+df_titanic['embarked'] = df_titanic['embarked'].fillna(mode_embarked)
+df_titanic['embark_town'] = df_titanic['embark_town'].fillna(mode_embark_town)
+
+print("\nFilled missing 'embarked' with:", mode_embarked)
+print("Filled missing 'embark_town' with:", mode_embark_town)
+
+# ---------------------------------------------------
+# 9. Convert 'sex' to numeric
+# ---------------------------------------------------
+df_titanic['sex'] = df_titanic['sex'].map({'male': 0, 'female': 1})
+
+# ---------------------------------------------------
+# 10. One-Hot Encode 'embarked' and 'class' columns
+# ---------------------------------------------------
+df_titanic = pd.get_dummies(df_titanic, columns=['embarked', 'class'], drop_first=True)
+
+# ---------------------------------------------------
+# 11. Drop irrelevant columns
+# ---------------------------------------------------
+df_titanic.drop(['who', 'adult_male', 'alive', 'embark_town'], axis=1, inplace=True)
+
+# ---------------------------------------------------
+# 12. Create new feature: family_size = sibsp + parch + 1
+# ---------------------------------------------------
+df_titanic['family_size'] = df_titanic['sibsp'] + df_titanic['parch'] + 1
+
+# ---------------------------------------------------
+# 13. Create binary feature: is_alone
+# ---------------------------------------------------
+df_titanic['is_alone'] = (df_titanic['family_size'] == 1).astype(int)
+
+# ---------------------------------------------------
+# 14. Drop original 'sibsp' and 'parch'
+# ---------------------------------------------------
+df_titanic.drop(['sibsp', 'parch'], axis=1, inplace=True)
+
+# ---------------------------------------------------
+# 15. Final cleaned dataset preview
+# ---------------------------------------------------
+print("\n=== Cleaned Dataset Preview ===")
+display(df_titanic.head())
+
+print("\n=== DONE: Titanic dataset cleaned successfully ===")
+
+
+
+
+
+
+
+# -------------------------
+# LAB NO : 5
+# -------------------------
+import sagemaker
+import boto3
+import pandas as pd
+import numpy as np
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+# --- 1. Sagemaker Session Setup ---
+
+# Get the SageMaker session
+sagemaker_session = sagemaker.Session()
+
+# Get the default S3 bucket created by SageMaker
+bucket = sagemaker_session.default_bucket()
+
+# Define a prefix (like a folder) in your S3 bucket to keep this lab organized
+prefix = 'iris-hpt-lab' 
+
+# Get the IAM execution role
+# This role was automatically created with your notebook instance
+# It gives your training jobs permission to access S3 and other AWS services
+role = sagemaker.get_execution_role()
+
+print(f"SageMaker Role: {role}")
+print(f"Default S3 Bucket: {bucket}")
+
+
+
+
+
+
+
+
+
+# --- 2. Load and Preprocess Data ---
+
+try:
+    # Load the dataset from the local file
+    df = pd.read_csv('Iris.csv')
+    print("Successfully loaded iris.csv")
+    
+    # --- 2a. Clean Column Names (as you requested) ---
+    print(f"Original columns: {df.columns.tolist()}")
+    df.columns = [col.lower() for col in df.columns]
+    print(f"Cleaned columns: {df.columns.tolist()}")
+
+    # --- 2b. Define Features (X) and Target (y) ---
+    # Assuming standard Iris dataset column names
+    feature_columns = ['sepallengthcm', 'sepalwidthcm', 'petallengthcm', 'petalwidthcm']
+    target_column = 'species'
+
+    # --- 2c. Preprocess Features ---
+    scaler = StandardScaler()
+    X = scaler.fit_transform(df[feature_columns])
+
+    # --- 2d. Preprocess Target ---
+    encoder = LabelEncoder()
+    y = encoder.fit_transform(df[target_column])
+
+    # --- 2e. Split Data ---
+    # We split into 80% train and 20% validation
+    # The HPT job will use the validation set to score the models
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # --- 2f. Format Data for Training ---
+    # Our script will want the target variable as the first column
+    train_data = np.concatenate([y_train.reshape(-1, 1), X_train], axis=1)
+    val_data = np.concatenate([y_val.reshape(-1, 1), X_val], axis=1)
+
+    print(f"Training data shape: {train_data.shape}")
+    print(f"Validation data shape: {val_data.shape}")
+
+    # --- 2g. Save and Upload to S3 ---
+    # Save processed data locally (SageMaker requires header=False, index=False)
+    pd.DataFrame(train_data).to_csv('train.csv', header=False, index=False)
+    pd.DataFrame(val_data).to_csv('validation.csv', header=False, index=False)
+
+    # Upload to S3
+    s3_input_train = sagemaker_session.upload_data(path='train.csv', bucket=bucket, key_prefix=f"{prefix}/data/train")
+    s3_input_validation = sagemaker_session.upload_data(path='validation.csv', bucket=bucket, key_prefix=f"{prefix}/data/validation")
+
+    print(f"Training data uploaded to: {s3_input_train}")
+    print(f"Validation data uploaded to: {s3_input_validation}")
+
+except FileNotFoundError:
+    print("Error: 'iris.csv' not found.")
+    print("Please upload 'iris.csv' to your SageMaker notebook instance directory.")
+
+
+
+
+
+
+
+
+# --- Step no: 3 ---
+# Create the training script file
+train_script = """import argparse
+import os
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow import keras
+
+# 1. --- Define Helper Function to Load Data ---
+def load_data(channel_path):
+    '''Load data from the CSV file in the specified channel.'''
+    # SageMaker channels are directories, so we find the file inside
+    input_file = os.path.join(channel_path, os.listdir(channel_path)[0])
+    df = pd.read_csv(input_file, header=None)
+    
+    # First column is the target (y), rest are features (X)
+    y = df.iloc[:, 0].astype(np.float32)
+    X = df.iloc[:, 1:].astype(np.float32)
+    return X, y
+
+# 2. --- Define Function to Build the Model ---
+def build_model(hidden_units, learning_rate):
+    '''Build a simple Keras Sequential model.'''
+    model = keras.Sequential([
+        # Input layer: 4 features (sepal/petal length/width)
+        keras.layers.Input(shape=(4,)),
+        
+        # Hidden layer: The number of units is a hyperparameter
+        keras.layers.Dense(units=hidden_units, activation='relu'),
+        
+        # Output layer: 3 classes (setosa, versicolor, virginica)
+        keras.layers.Dense(units=3, activation='softmax')
+    ])
+    
+    # Optimizer: The learning rate is a hyperparameter
+    optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+    
+    # Compile the model
+    model.compile(
+        optimizer=optimizer,
+        loss='sparse_categorical_crossentropy', # Use this loss for integer labels
+        metrics=['accuracy']
+    )
+    return model
+
+# 3. --- Main Training and Parsing Logic ---
+if __name__ == '__main__':
+    
+    # --- 3a. Parse Arguments ---
+    # SageMaker passes hyperparameters and paths as command-line arguments
+    parser = argparse.ArgumentParser()
+    
+    # Hyperparameters
+    parser.add_argument('--hidden-units', type=int, default=10)
+    parser.add_argument('--learning-rate', type=float, default=0.01)
+    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--batch-size', type=int, default=16)
+
+    # SageMaker environment variables
+    parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR'))
+    parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAIN'))
+    parser.add_argument('--validation', type=str, default=os.environ.get('SM_CHANNEL_VALIDATION'))
+    
+    args, _ = parser.parse_known_args()
+
+    # --- 3b. Load Data ---
+    X_train, y_train = load_data(args.train)
+    X_val, y_val = load_data(args.validation)
+
+    # --- 3c. Build Model ---
+    model = build_model(args.hidden_units, args.learning_rate)
+
+    # --- 3d. Train Model ---
+    print("Starting model training...")
+    history = model.fit(
+        X_train, y_train,
+        validation_data=(X_val, y_val),
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        verbose=2 # Show logs
+    )
+    
+    # --- 3e. CRITICAL: Print the Objective Metric ---
+    # The SageMaker HPT job will read this line from the logs to find the score.
+    # It MUST match the 'regex' we define later.
+    # We use the final validation accuracy from the training history.
+    final_val_accuracy = history.history['val_accuracy'][-1]
+    print(f"val_accuracy: {final_val_accuracy}")
+
+    # --- 3f. Save Model ---
+    # Save the model in TensorFlow's SavedModel format
+    model.save(os.path.join(args.model_dir, '1'))
+    print("Model saved.")
+"""
+
+# Write the script to a file
+with open('train.py', 'w') as f:
+    f.write(train_script)
+
+print("Training script 'train.py' created successfully!")
+
+
+
+
+
+
+
+
+# --- Step no: 4 ---
+from sagemaker.tensorflow import TensorFlow
+from sagemaker.tuner import (
+    IntegerParameter,
+    ContinuousParameter,
+    HyperparameterTuner,
+)
+
+# --- 4a. Define the Metric ---
+# This tells SageMaker what to look for in the logs.
+# It MUST match the print() statement in train.py
+metric_definitions = [
+    {
+        'Name': 'val_accuracy',
+        'Regex': 'val_accuracy: ([0-9\\.]+)'
+    }
+]
+
+# --- 4b. Create the TensorFlow Estimator ---
+# This is the blueprint for a single training job.
+estimator = TensorFlow(
+    entry_point='train.py',             # Our script
+    role=role,
+    instance_count=1,                   # Use 1 instance per job
+    instance_type='ml.m5.large',
+    framework_version='2.12',           
+    py_version='py310',
+    
+    # *** THIS IS THE CRITICAL FIX ***
+    # We are passing the metric definition to the estimator
+    metric_definitions=metric_definitions 
+)
+
+# --- 4c. Define Hyperparameter Ranges to Search ---
+hyperparameter_ranges = {
+    'learning-rate': ContinuousParameter(0.0001, 0.01),
+    'hidden-units': IntegerParameter(10, 50)
+}
+
+# --- 4d. Create the HyperparameterTuner Object ---
+# This tuner will now inherit the metric_definitions from the estimator
+tuner = HyperparameterTuner(
+    estimator=estimator,
+    objective_metric_name='val_accuracy', # This name now matches a defined metric
+    objective_type='Maximize',            
+    hyperparameter_ranges=hyperparameter_ranges,
+    metric_definitions=metric_definitions,
+    max_jobs=6,
+    max_parallel_jobs=2
+)
+
+print("Tuner object created successfully with metrics. Ready for Step 5.")
+
+
+
+
+
+
+
+
+
+# --- 5. Launch the Tuning Job ---
+# Create S3 input objects
+s3_train = sagemaker.inputs.TrainingInput(s3_input_train, content_type='text/csv')
+s3_validation = sagemaker.inputs.TrainingInput(s3_input_validation, content_type='text/csv')
+
+print("Starting Hyperparameter Tuning Job... This will take 10-15 minutes.")
+
+tuner.fit({'train': s3_train, 'validation': s3_validation}, wait=True)
+
+print("Tuning Job complete.")
+
+
+
+
+
+
+
+
+# --- 6. Analyze Results ---
+# Get a summary of all tuning jobs
+results = tuner.analytics().dataframe()
+print("All Tuning Job Results:")
+print(results.sort_values('FinalObjectiveValue', ascending=False))
+
+# Get the name of the best job
+best_job_name = tuner.best_training_job()
+print(f"\nBest Training Job Name: {best_job_name}")
+
+# --- 6b. Deploy the Best Model ---
+print("\nDeploying the best model as an endpoint...")
+
+# Note: Some instance types (like 'ml.t3.medium') are NOT valid for SageMaker inference in all regions.
+# We'll use 'ml.m5.large' instead — it's cost-effective and widely supported.
+predictor = tuner.deploy(
+    initial_instance_count=1,
+    instance_type='ml.m5.large'   # <-- changed from ml.t3.medium
+)
+
+print(f"\n✅ Endpoint '{predictor.endpoint_name}' deployed successfully!")
+
+# --- 6c. Optional: Test the Endpoint ---
+import numpy as np
+
+# Example test input (adjust shape based on your model)
+test_data = np.random.rand(1, 4)  # e.g., 4 features if your model expects that
+
+print("\nSending test prediction request...")
+prediction = predictor.predict(test_data)
+print("Prediction result:", prediction)
+
+
+
+
+
+
+
+
+
+
+# --- 7. Test the Endpoint ---
+# Let's take one sample from our validation set (X_val[0])
+# NOTE: We must send the data in the same scaled format!
+sample = X_val[0]
+print(f"Test sample (scaled): {sample}")
+
+# The TensorFlow endpoint expects a specific JSON format
+payload = {'instances': [sample.tolist()]}
+
+# Make the prediction
+response = predictor.predict(payload)
+
+# The output 'predictions' is a list of probabilities for each class (0, 1, 2)
+predictions = response['predictions'][0]
+predicted_class = np.argmax(predictions)
+
+# Convert the class number back to the original label
+predicted_label = encoder.inverse_transform([predicted_class])[0]
+
+print(f"\nPrediction probabilities: {predictions}")
+print(f"Predicted class: {predicted_class}")
+print(f"Predicted species: {predicted_label}")
+
+
+
+
+
+
+
+
+
+# --- 8. CLEAN UP ---
+print(f"Deleting endpoint: {predictor.endpoint_name}...")
+predictor.delete_endpoint()
+print("Endpoint deleted.")
+
+# --- NOW, YOU MUST MANUALLY STOP THE NOTEBOOK ---
+# 1. Go to the SageMaker console.
+# 2. Click on "Notebook" -> "Notebook instances".
+# 3. Select your notebook.
+# 4. Click "Actions" -> "Stop".
+# 5. Once it's stopped, you can click "Actions" -> "Delete" to remove it.
